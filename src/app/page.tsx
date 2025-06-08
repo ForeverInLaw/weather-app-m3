@@ -1,25 +1,18 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { Container, Typography, Box, CircularProgress, Alert, Fade, IconButton } from '@mui/material'; // Added Fade, IconButton
-import Brightness4Icon from '@mui/icons-material/Brightness4'; // Icon for dark mode
-import Brightness7Icon from '@mui/icons-material/Brightness7'; // Icon for light mode
-import { useAppTheme } from '@/context/ThemeContext'; // Import theme context hook
+import { Container, Typography, Box, CircularProgress, Alert, Fade, IconButton, Button } from '@mui/material'; // Added Button
+import Brightness4Icon from '@mui/icons-material/Brightness4';
+import Brightness7Icon from '@mui/icons-material/Brightness7';
+import LocationOnIcon from '@mui/icons-material/LocationOn'; // For a "grant location" button
+import { useAppTheme } from '@/context/ThemeContext';
 import { getCurrentPosition } from '@/services/geolocationService';
-// getAirQualityData removed, AirQualityData interface might still be used if weatherData.airQuality type needs it
-import { getWeatherData, WeatherData, AirQualityData } from '@/services/weatherService'; 
-import CurrentWeather from '@/components/CurrentWeather'; // Import the component
-import DetailedInfo from '@/components/DetailedInfo'; // Import the component
-import HourlyForecast from '@/components/HourlyForecast'; // Import the component
-import DailyForecast from '@/components/DailyForecast'; // Import the component
-import AdditionalInfo from '@/components/AdditionalInfo'; // Import the component
-
-// Placeholder components (we will create these next)
-// import CurrentWeatherComponent from '@/components/CurrentWeather';
-// import DetailedInfoComponent from '@/components/DetailedInfo';
-// import HourlyForecastComponent from '@/components/HourlyForecast';
-// import DailyForecastComponent from '@/components/DailyForecast';
-// import AdditionalInfoComponent from '@/components/AdditionalInfo';
+import { getWeatherData, WeatherData } from '@/services/weatherService';
+import CurrentWeather from '@/components/CurrentWeather';
+import DetailedInfo from '@/components/DetailedInfo';
+import HourlyForecast from '@/components/HourlyForecast';
+import DailyForecast from '@/components/DailyForecast';
+import AdditionalInfo from '@/components/AdditionalInfo';
 
 interface Location {
   lat: number;
@@ -29,33 +22,37 @@ interface Location {
 export default function HomePage() {
   const [location, setLocation] = useState<Location | null>(null);
   const [weatherData, setWeatherData] = useState<WeatherData | null>(null);
-  // airQuality state will now be derived from weatherData if it exists
-  // const [airQuality, setAirQuality] = useState<AirQualityData | null>(null); // No longer separate state
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { mode, toggleThemeMode } = useAppTheme();
 
-  useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const position = await getCurrentPosition();
-        setLocation(position);
-        const weather = await getWeatherData({ lat: position.lat, lon: position.lon });
-        setWeatherData(weather);
-        // Air quality is now part of 'weather' object: weather.airQuality
-        // setAirQuality(weather.airQuality || null); // No longer needed to set separate state
-      } catch (err: any) {
-        setError(err.message || 'An unknown error occurred.');
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
-    };
+  const fetchData = async () => {
+    setLoading(true);
+    setError(null);
+    setWeatherData(null); // Clear previous data on new fetch attempt
 
-    fetchData();
-  }, []);
+    try {
+      console.log("Attempting getCurrentPosition...");
+      const position = await getCurrentPosition();
+      console.log("getCurrentPosition success:", position);
+      setLocation(position);
+
+      console.log(`Fetching weather for: ${position.lat}, ${position.lon}`);
+      const weather = await getWeatherData({ lat: position.lat, lon: position.lon });
+      setWeatherData(weather);
+      setError(null); // Clear any previous errors if successful
+    } catch (err: any) {
+      console.error("Error during data fetch:", err.message);
+      setError(err.message || "Could not fetch weather data. Please ensure location services are enabled and try again.");
+      setWeatherData(null); // Ensure no stale data is shown
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchData(); // Initial fetch on component mount
+  }, []); 
 
   if (loading) {
     return (
@@ -66,29 +63,51 @@ export default function HomePage() {
     );
   }
 
-  if (error) {
+  // If there's an error (geolocation or weather API)
+  if (error && !weatherData) { // Show error/prompt only if no weather data is successfully displayed
     return (
-      <Container sx={{ mt: 4 }}>
-        <Alert severity="error">{error}</Alert>
+      <Container sx={{ mt: 4, textAlign: 'center' }}>
+        <Alert severity="error" sx={{ mb: 2 }}>
+          {error}
+        </Alert>
+        <Typography variant="body1" sx={{ mb: 2 }}>
+          Please ensure location services are enabled in your browser and for this site.
+        </Typography>
+        <Button 
+          variant="contained" 
+          onClick={fetchData} 
+          startIcon={<LocationOnIcon />}
+        >
+          Retry / Grant Location
+        </Button>
       </Container>
     );
   }
-
+  
+  // If no data and no error (should be rare, but a fallback)
   if (!weatherData || !location) {
     return (
-      <Container sx={{ mt: 4 }}>
-        <Alert severity="info">No weather data available.</Alert>
+      <Container sx={{ mt: 4, textAlign: 'center' }}>
+        <Alert severity="warning">Weather data is currently unavailable. Please try again.</Alert>
+        <Button 
+          variant="outlined" 
+          onClick={fetchData} 
+          sx={{ mt: 2 }}
+        >
+          Retry
+        </Button>
       </Container>
     );
   }
 
-  const cityName = weatherData.locationName; // Use locationName from WeatherData
-  const airQuality = weatherData.airQuality; // Get airQuality from weatherData
+  // If data is successfully loaded:
+  const cityName = weatherData.locationName;
+  const airQuality = weatherData.airQuality;
 
   return (
     <Container sx={{ py: 4 }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-        <Typography variant="h3" component="h1" sx={{ textAlign: 'center', flexGrow: 1 }}>
+        <Typography variant="h3" component="h1" sx={{ textAlign: 'center', flexGrow: 1, fontSize: { xs: '2rem', sm: '2.5rem', md: '3rem'} } }>
           {cityName ? `Weather in ${cityName}` : 'Weather in Your Location'}
         </Typography>
         <IconButton sx={{ ml: 1 }} onClick={toggleThemeMode} color="inherit" aria-label="toggle theme mode">
@@ -96,13 +115,8 @@ export default function HomePage() {
         </IconButton>
       </Box>
       
-      {/* Placeholder for City Name - OpenWeatherMap usually returns city name with OneCall API, or we might need a reverse geocoding step */}
-      {/* <Typography variant="h5" component="h2" gutterBottom sx={{ textAlign: 'center', mb: 2 }}>
-        City: {weatherData.timezone ? weatherData.timezone.split('/')[1].replace('_', ' ') : 'Loading...'}
-      </Typography> */}
-
-      <Fade in={!loading} timeout={800}>
-        <div> {/* Fade needs a single child, or use React.Fragment if it causes layout issues */}
+      <Fade in={!!weatherData} timeout={800}> 
+        <div> 
           <CurrentWeather data={weatherData.current} cityName={cityName} />
           <DetailedInfo data={weatherData.current} />
           <HourlyForecast data={weatherData.hourly} />
@@ -114,7 +128,6 @@ export default function HomePage() {
           />
         </div>
       </Fade>
-
     </Container>
   );
 }
